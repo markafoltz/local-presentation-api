@@ -1,44 +1,64 @@
-# Local Presentation API
+# Local Presentation Mode
 
 ## Background
 
-The Presentation API allows a page to request that a URL be rendered on another
-display. This can be implemented in one of two ways, called 2-UA and 1-UA modes.
+The [Presentation API](https://w3c.github.io/presentation-api/) allows the user
+to request that a [presentation
+URL](https://w3c.github.io/presentation-api/#dfn-presentation-url) be shown on
+another display. This can be done in two ways.  In 1-UA mode, the same browser
+renders the presentation and sends the resulting audio/video output to the
+target display.  In 2-UA mode, the browser sends just the URL to the target
+display, which is responsible for rendering the presentation content.
 
-In 2-UA mode, the URL is sent to a distinct user agent and rendered on a
-completely separate device.
+In either case, the user agent rendering the presentation [creates a distinct
+profile](https://w3c.github.io/presentation-api/#creating-a-receiving-browsing-context)
+(storage area) for the presentation, that is discarded when the presentation is
+closed.  This minimizes the developer-exposed differences between 1-UA and 2-UA
+modes, and improves privacy for users of shared displays.
 
-In 1-UA mode, the URL is rendered in tab in the same user agent, and the tab
-contents mirrored to a remote display, or shown on a secondary attached
-display. (Chrome has implemented both 2-UA and 1-UA modes.)
+We have found that 2-UA mode works well for presentations that are mostly
+focused on media playback, as they get to use the full audio and video
+capabiliites of the target display.  However, for productivity applications,
+like presenting a deck of HTML slides, neither 1-UA or 2-UA mode have proven
+suitable.
 
-In either case, the user agent rendering the presentation must create a distinct
-profile (storage area) for the presentation.  The profile is discarded when the
-presentation is closed.  This minimizes the developer-exposed differences
-between 1-UA and 2-UA modes, and improves privacy for users of shared displays.
+We propose a new mode for the Presentation API that removes the restriction on
+presentations to use a separate storage area, calling it "local presentation
+mode."  The result is similar to invoking `window.open`, then capturing the
+output of the new window and streaming it to a target display.  In turn, local
+presentation mode adds additional restrictions on the behavior of the
+presentation.
 
-While 2-UA mode has worked well for media-centric applications (video and audio
-playback), productivity applications prefer 1-UA to target a broader range of
-content and screens, including cloud-connected screens that only support 1-UA
-mode.
+If this mode proves suitable for a wide range of applications, the plan is for
+the spec to no longer treat the existing 1-UA mode (with a separate storage
+area) as a [possible
+implementation](https://w3c.github.io/presentation-api/#introduction) of the
+Presentation API.  2-UA mode would remain, with the storage area restrictions in
+place when the presentation is rendered on another display.
 
-## Use cases
+## Use cases 
 
-Productivity sites that use complex, interactive content assembled from many
-components and origins have found it difficult or impossible to use the
-Presentation API in 1-UA mode for reasons listed below.
+Content that uses complex, interactive content assembled from many components
+and origins have found it difficult or impossible to use the current
+Presentation API for reasons listed below.
 
-The canonical example driving this is a Web slide show.  For simplicity I'll use
-_controlling page_ for the page that controls the slide show and _presented
-page_ for the page showing the slides on the target display.
+The example driving these examples is a Web slide show.  For simplicity I'll use
+_controlling page_ for the page that starts the presentation and controls the
+slide show, and _presentation_ for the page showing the slides on the target
+display.  While the slide show is being presented, the controlling page would
+show slide thumbnails, speaker notes, and controls to advance the slides in the
+presentation.
+
+Here are some of the issues with the current Presentation API 1-UA mode:
 
 ### Third party embeds
 
-The presented page cannot embed private third party resources that require specific
-cookies or profile state, since it can't set cookies on the third party origin.
+The presentation cannot embed private third party resources that require
+specific cookies or profile state, since it can't set cookies on the third party
+origin.
   
-> Example: A slide embeds a private YouTube video that requires that the browser
-> be logged into YouTube.
+> Example: A slide embeds a private YouTube video that requires a youtube.com
+> login cookie.
 
 ### Offline
   
@@ -47,143 +67,108 @@ cannot easily present content that is offline.  There is no URL to navigate to,
 and all of the offline storage has to be serialized and sent to the presented
 page.
 
-> Example: A salesperson stores his slideshow offline and wants to present it on a
-> wired display without connecting to WiFi.
+> Example: A salesperson stores their slideshow offline and wants to present it
+> on a wired display without connecting to WiFi.
 
 ### WSIWYG
 
-Editing the content of the presented page while presenting requires significant
+Editing the content of the presentation while presenting requires significant
 changes to the application.  The entire data model (stored as Javascript objects
 and/or Web components) has to be synchronized between the controlling page and
-the presented page using messages.
+the presentation using messages.
 
 > Example: The user is editing the slide show content and immediately wants to
 > see the results while presenting. 
 
 ### Interaction (touch/gesture)
 
-It is difficult to interact directly with the presented page in response to
-mouse or touch on the controlling page.  The touch or mouse event has to be
-captured, serialized, and coordinates translated to find the correct element on
-the presented page.  The presented component then has to be updated to respond
-to these synthetic events.
+It is difficult to interact directly with the presentation in response to mouse
+or touch on the controlling page.  The touch or mouse event has to be captured,
+serialized, and coordinates translated to find the correct element on the
+presentation.  The presented component then has to be updated to respond to
+these synthetic events.
 
 >  Example: On the controlling page, the salesperson uses a touchpad to
 >  highlight an element of the slide with popup content.  They want the same
->  popup to appear on the presented page.
+>  popup to appear on the presentation.
 
-## Local Presentation API
+## Local Presentation Mode
 
-Some of these issues could be addressed through restructuring of the Web
-application around a multi-document and multi-media syncronization library
-like [MediaScape](http://www.mediascapeproject.eu/).
+The proposal is to meet the use cases above by adding a new mode to the
+Presentation API that requests that the presentation URL be opened in a window
+that functions similar to a window created by `window.open`.  The presentation
+shares the storage area with the requesting page, and has access to its parent's
+`window` object.
 
-However, the majority of content was not written with multi-screen in mind, and
-the use case is not prevalent enough to justify a full rewrite.  For them,
-enabling a different presentation mode could significantly lower the bar for
-adoption by adapting web applications that already use popup windows to render
-alternate views.
-
-Requirements:
-  * Allow the page to detect availability of a remote display capable of
-    mirroring a window (tab).
-  * Allow direct script access between the controlling and presented page.
-  * Allow sharing of local storage (including cookies and offline storage)
-    between pages.
-  * Make it simple to translate input events from the controlling page to the
-    presentation page.
-    
-Not required:
-  * Connection from other pages/devices
-  * Reconnection after the initiating page closes or navigates.
-
-Most of these needs can be met by presentation of a same-origin window created
-by (and accessible to) the controlling page.  The new window would be presented
-on the remote display through wired or wireless mirroring (1-UA mode).  Input
-event translation needs more investigation.
-
-## API shape and rationale
-
-The basic idea is that a page that requests a presentation with a special URL,
-`about:blank`, will cause that the user agent create a new blank window in the
-same browser profile and render that window on a display of the user's choice.
-
-This can be thought of as calling `window.open('about:blank')`, where the user
-gets to choose where the popup window goes.  However, the page will not get to
-control the appearance or size of the new window - the only guarantee is that it
-will be rendered on the target screen (typically taking up the entire screen).
-
-In the current usage of the Presentation API, an ID is returned that allows the
-controlling page to reconnect to a running presentation.  In local presentation
-mode, no ID is returned and reconnection is not possible.  This mirrors the
-current relationship between a window and its opener (i.e., the a window's
-opener cannot be changed over its lifetime).
+In turn the presentation, has the following restrictions relative to a
+presentation started in the regular (non-local) mode:
+  * It will always be rendered on the controlling user agent.
+  * No `PresentationConnection` is returned, so cross-origin messages have to be
+    exchanged using `postMessage` on the respective Window objects.
+  * It cannot be accessed after navigation by the controlling page via
+    `PresentationRequest.reconnect()`.
 
 ## Sample code
 
-The first sample is for a page that only wants to use the local presentation
-mode.
+This code creates a `PresentationRequest` that, when started, opens the URL in a
+new local window and streams the result to the chosen presentation display.
 
 ```javascript
-<!-- Controlling page -->
+<!-- Controlling page, https://www.example.com/index.html -->
 let presentationWindow;
-const request = new PresentationRequest('about:blank');
+const request = new PresentationRequest('https://www.example.com/slides.html',
+    true /* isLocal */);
 request.start().then(result => {
-  <!-- Only a window object can be returned for 'about:blank'. -->
+  <!-- A Window object is returned. -->
   presentationWindow = result;
-  <!--
-    presentationWindow is opened to about:blank and is mirrored to the display. 
-    This page has access to presentationWindow and presentationWindow.opener
-    points to window.
-  -->
+  <!-- Since presentationWindow is same-origin, it can access this. -->
 });
 ```
 
-The second sample is a controlling page that wants to use either local
-presentation mode, or remote presentation (2-UA) mode.  This allows a site to
-target the widest range of presentation displays, if it is willing to implement
-somewhat different behavior for each type.
+## Proposed IDL Changes
+
+Changes:
+* Adds `isLocal` to the `PresentationRequest` constructor that takes a single
+  URL.
+* Adds `isLocal` attribute to `PresentationRequest` that reflects the
+  constructor value.
+  * This allows local presentation mode to be feature detected before the
+    constructor is invoked.
+* Adds `Window` as a legal type to resolve the `start` Promise.
+
 
 ```javascript
-<!-- Controlling page -->
-let presentationWindow;
-let presentationConnection;
-const request = new PresentationRequest(['about:blank',
-    'https://www.example.com/remote-slides.html']);
-request.start().then(result => {
-  <!-- Window object is only returned for 'about:blank'. -->
-  if (result.__proto__.isPrototypeOf(window)) {
-    presentationWindow = result;
-  } else {
-    // Handle connection to remote presentation.
-    presentationConnection = result;
+  [Constructor(USVString url, optional isLocal = false),
+   Constructor(sequence<USVString> urls),
+   SecureContext,
+   Exposed=Window]
+  partial interface PresentationRequest {
+    readonly boolean attribute isLocal;
+  };
+  
+
+  partial interface PresentationRequest {
+    Promise<PresentationConnection|Window>   start();
   }
-});
 ```
-
-## Proposed IDL
-
-```
-partial interface PresentationRequest {
-  Promise<PresentationConnection|Window>   start();
-}
-```
-
-## Feature detection
-
-If shipping implementations do not treat 'about:blank' as a compatible URL, then
-the site can use screen availability of that URL to feature detect local
-presentation mode.
-
-TODO: Check Firefox behavior
 
 ## Privacy and security considerations
 
-We need to ensure same-origin policy is not violated by if the presentation
-window is streamed to another device.  Target displays should be trusted,
-similar to the displays used for features like tab mirroring or desktop
-screenshare.
+The privacy and security considerations for local presentation mode are similar
+to [existing ones for the Presentation API](
+https://w3c.github.io/presentation-api/#security-and-privacy-considerations).
 
-Since the presentation window starts in fullscreen, the user agent should
-display the current origin of presentation windows elsewhere, and allow the user
-to view its location bar and security enamel by dropping it out of fullscreen.
+Because the presentation will be rendered on the same user agent, the privacy
+concerns about leaving browser state on a shared display do not apply to local
+presentation mode.
+
+We need to ensure same-origin policy is not violated when the presentation
+window contains cross-origin content and is streamed to the display.  Displays
+should be trusted by the controlling user agent and not under the control of the
+controlling page.
+
+Since the presentation window will typically start in fullscreen on the target
+display, the user agent should display the origin of the presentation URL when
+presentation is requested.  (This recommendation is already included as a
+[User Interface Guideline](
+http://127.0.0.1:8000/mfoltzgoogle/local-presentation-api/explainer.md)).
