@@ -62,10 +62,9 @@ origin.
 
 ### Offline
   
-The presented does not have access to offline storage, and the controlling page
+The presentation does not have access to offline storage, and the controlling page
 cannot easily present content that is offline.  There is no URL to navigate to,
-and all of the offline storage has to be serialized and sent to the presented
-page.
+and all of the offline storage has to be serialized and sent to the presentation.
 
 > Example: A salesperson stores their slideshow offline and wants to present it
 > on a wired display without connecting to WiFi.
@@ -97,31 +96,34 @@ these synthetic events.
 The proposal is to meet the use cases above by adding a new mode to the
 Presentation API that requests that the presentation URL be opened in a window
 that functions similar to a window created by `window.open`.  The presentation
-shares the storage area with the requesting page, and has access to its parent's
+shares the storage area with the controlling page.  If the presentation and the
+controlling page are same-origin, they will have access to each other's
 `window` object.
 
-In turn the presentation, has the following restrictions relative to a
+In turn the presentation has the following restrictions relative to a
 presentation started in the regular (non-local) mode:
   * It will always be rendered on the controlling user agent.
   * No `PresentationConnection` is returned, so cross-origin messages have to be
-    exchanged using `postMessage` on the respective Window objects.
+    exchanged using `postMessage` on the respective `window` objects.
   * It cannot be accessed after navigation by the controlling page via
     `PresentationRequest.reconnect()`.
 
 ## Sample code
 
 This code creates a `PresentationRequest` that, when started, opens the URL in a
-new local window and streams the result to the chosen presentation display.
+new local window, returns the corresponding `window` object, and streams the content
+of the window to the chosen presentation display.
 
 ```javascript
 <!-- Controlling page, https://www.example.com/index.html -->
 let presentationWindow;
 const request = new PresentationRequest('https://www.example.com/slides.html',
     true /* isLocal */);
-request.start().then(result => {
-  <!-- A Window object is returned. -->
-  presentationWindow = result;
-  <!-- Since presentationWindow is same-origin, it can access this. -->
+request.start()  // User is prompted to choose a presentation display.
+    .then(result => {
+     <!-- URL is rendered in a new window and its object is returned. -->
+     presentationWindow = result;
+     <!-- Since presentationWindow is same-origin, presentationWindow.opener == this. -->
 });
 ```
 
