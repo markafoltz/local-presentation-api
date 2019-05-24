@@ -142,7 +142,7 @@ Changes:
 
 ```javascript
   dictionary PresentationRequestOptions {
-    isLocal = false;
+    boolean isLocal = false;
   };
 
   [Constructor(USVString url, optional PresentationRequestOptions options),
