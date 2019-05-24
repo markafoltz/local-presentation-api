@@ -118,7 +118,7 @@ of the window to the chosen presentation display.
 <!-- Controlling page, https://www.example.com/index.html -->
 let presentationWindow;
 const request = new PresentationRequest('https://www.example.com/slides.html',
-    true /* isLocal */);
+    {isLocal: true});
 request.start()  // User is prompted to choose a presentation display.
     .then(result => {
      <!-- URL is rendered in a new window and its object is returned. -->
@@ -130,18 +130,23 @@ request.start()  // User is prompted to choose a presentation display.
 ## Proposed IDL Changes
 
 Changes:
-* Adds `isLocal` to the `PresentationRequest` constructor that takes a single
-  URL.
-* Adds `isLocal` attribute to `PresentationRequest` that reflects the
-  constructor value.
+* Adds a dictionary `PresesntationRequestOptions` with a single property `isLocal`.
   * This allows local presentation mode to be feature detected before the
     constructor is invoked.
+* Adds `PresentationRequestOptions` to the `PresentationRequest` constructor.
+  * Note that only a single URL is supported when local mode is requested. 
+* Adds `isLocal` property to `PresentationRequest` that reflects the
+  option value.
 * Adds `Window` as a legal type to resolve the `start` Promise.
 
 
 ```javascript
-  [Constructor(USVString url, optional isLocal = false),
-   Constructor(sequence<USVString> urls),
+  dictionary PresentationRequestOptions {
+    isLocal = false;
+  };
+
+  [Constructor(USVString url, optional PresentationRequestOptions options),
+   Constructor(sequence<USVString> urls, optional PresentationRequestOptions options),
    SecureContext,
    Exposed=Window]
   partial interface PresentationRequest {
