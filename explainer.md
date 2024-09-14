@@ -177,5 +177,4 @@ controlling page.
 Since the presentation window will typically start in fullscreen on the target
 display, the user agent should display the origin of the presentation URL when
 presentation is requested.  (This recommendation is already included as a
-[User Interface Guideline](
-http://127.0.0.1:8000/mfoltzgoogle/local-presentation-api/explainer.md)).
+User Interface Guideline.)
